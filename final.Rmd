@@ -1,0 +1,334 @@
+---
+title: "finalProject"
+output: html_document
+---
+
+# Introduction to Data Science    
+
+Data science study data. Here should be som introduction, but....    
+1. I am very bad at this.    
+2. If you found this, I belive you already interested in data science and want have a quick start with R.     
+So lets skip it!     
+
+Before you start:       
+1. I will put some kink in this tutorial, but that is not enough, feel free to google, or refer to [R documentation](https://www.rdocumentation.org) to learn more.     
+2. the amazing [lecture note](http://www.hcbravo.org/IntroDataSci/bookdown-notes) has more detial, if you have time, read it and learn more! 
+
+
+This tutorial can give you the basic idea about how to analysis data using R.   
+  
+The first download R from [here](https://www.r-project.org), the language host.    
+You may want to use [RStudio](https://www.rstudio.com), a very good R editor.   
+Then install packages. In this tutorial, you need to use **tidyverse, lubridate, broom, caret**.    
+Just click install package in menu bar and type in package name, then install. Remember check "install dependence" before install package.     
+
+the following commands are load packages.   
+```{r setup}
+library(lubridate)
+library(tidyverse)
+library(broom)
+```
+
+# Data Collection and Management   
+
+look at this R code below   
+
+```{r}
+yellow_trip<- read.csv('https://s3.amazonaws.com/nyc-tlc/trip+data/yellow_tripdata_2018-12.csv',nrows=5000)
+head(yellow_trip)
+
+```
+In R, load formated data is very easy. with one simple command, data are loaded from file stored in data frame.    
+you can change "nrows" arguments to read more data from that file. be careful, that file is about 690M. you don't want read all of it from internet.    
+
+Or you can download this file and read from local file system. change the first argument to the path of your file.     
+
+look at following code:    
+```{r}
+class(yellow_trip)
+```
+
+R is object-oriented and each object has its class.    
+The most common object I used in this tutorial is 'data.frame'.    
+It host entities in rows, and each attributes are in columns.    
+
+```{r}
+ncol(yellow_trip)
+nrow(yellow_trip)
+colnames(yellow_trip)
+```
+inn R studio, you can see entire data frame by click the name of that data frame in "environment" tab.    
+
+```{r}
+table(yellow_trip$passenger_count)
+summary(yellow_trip$passenger_count)
+
+table(yellow_trip$payment_type)
+```
+
+After load (part of) the table, you can use R to view the property of the data frame.     
+table count the occurrence, and summary summarize data depend on its type.    
+
+R is very adaptive, it can handle mist of datatype, but sometime we still need to manually mutate the data.    
+
+see following code:   
+
+```{r}
+summary(yellow_trip$tpep_pickup_datetime)
+summary(yellow_trip$payment_type)
+```
+
+piclup_datatime should be time, and paymenttype should be categorical. But R treat them as string and number. now we need to do something to fix it:    
+
+```{r}
+summary(factor(yellow_trip$payment_type))
+
+ yellow_trip %>%
+  mutate(pick_up_date = as.Date(parse_date_time( tpep_pickup_datetime ,'ymd HMS'))) %>%
+  group_by(pick_up_date) %>%
+  summarise(number=n())
+
+yellow_trip %>%
+  group_by(passenger_count) %>%
+  summarise(mean(trip_distance))
+  
+```
+
+'%>%' operator pass result of previous operation into first argument of second operation.     
+most of r function does not change the parameters. even mutate. The function mutate take a dataframe, and return a slightly different one.    
+  
+sometimes we don't want to look at the entire data frame, and only interested in part of it.    
+then we need to use filter and select.   
+
+```{r}
+yellow_trip %>% 
+  mutate(pick_up_date = as.Date(parse_date_time( tpep_pickup_datetime ,'ymd HMS'))) %>%
+  select(pick_up_date, passenger_count) %>%
+  filter(passenger_count>1) %>%
+  group_by(pick_up_date, passenger_count) %>%
+  summarise(number=n())
+```
+
+filter and select is very helpful when dataframe contain data more than what you interest.     
+
+When data set is too big, for example this dataset(not just first 5000 line), look at sample of it is a good idea.   
+
+```{r}
+yellow_trip %>% 
+  sample_frac(.002)
+```
+
+Before going forward, you want to download that file, and load part of it.    
+
+uncomment the download command and r will download file for you.    
+```{r download}
+# download.file('https://s3.amazonaws.com/nyc-tlc/trip+data/yellow_tripdata_2018-12.csv', destfile="data/yellow_tripdata_2018-12.csv")
+yellow_part<- read_csv('data/yellow_tripdata_2018-12.csv') %>%
+  sample_frac(0.05)
+
+```
+
+# Data Exploratory and Analysis    
+
+Data science is about finding hidden information behind data, and in this part, this I will guide you through the basic data analysis.   
+ 
+the following code analyze the relationship of payment type and tip amount, and plot it with ggplot.    
+
+```{r}
+tip_summary <- yellow_part %>%
+  group_by(payment_type) %>%
+  summarise(mean_tip_amount=mean(tip_amount)) 
+tip_summary
+tip_summary %>%
+  ggplot(mapping=aes(x=payment_type,y=mean_tip_amount)) +
+  geom_bar(stat="identity") 
+
+```
+'summarize' command summarize the mean if tip and store in the column named mean_tip_amount. You can use sd, to find standard error, or sum to find sum.  
+
+ggplot is very easy to use. You put in some argument, and add some layer, and ggplot will plot it for you.       
+put in 'mapping=aes(x=your_x,y-your_y)' and add layer(geom_xxxx) that match data property.   
+
+the following code is a bad example:    
+
+```{r}
+tip_summary %>%
+  ggplot(mapping=aes(x=payment_type,y=mean_tip_amount)) +
+  geom_line()
+```
+
+payment type has no order, so good data scientist would not use line plot with categorical data.    
+
+
+# Hypothesis Testing     
+
+sometime plot may not perform as you expect:    
+
+```{r}
+yellow_part %>%
+  group_by(passenger_count) %>%
+  summarise(mean_trip_distance=mean(trip_distance))%>%
+  ggplot(mapping=aes(x=passenger_count,y=mean_trip_distance)) +
+  geom_point()+
+  geom_line()
+```
+
+As you can see, in this plot, mean trip distance goes crazy when passenger count higher than 7. if you want to know why    
+```{r}
+yellow_part %>%
+  filter(passenger_count>5) %>%
+  group_by(passenger_count) %>%
+  summarize(n())
+```
+you can see there is very little trip record there.     
+it is obvious that single record does not mean a trend, and dat scientists want to know if there is a trend.    
+
+But in most of data, trend is not easy to identify by human eye from graph, and human make error.    
+data scientists want to use lm function.  
+lm function find best fit line.    
+the following example shows lm is a good regression function. result does not change a lot with or without outlier. you should trust it.     
+```{r}
+lm(trip_distance~passenger_count,data=yellow_part)
+lm(trip_distance~passenger_count,data=filter(yellow_part, passenger_count<7))
+```
+
+we can plot the regression line with ggplot too.    
+look at following code:      
+```{r}
+yellow_part %>%
+  ggplot(mapping=(aes(x=passenger_count,y=trip_distance))) +
+  geom_smooth(method=lm)
+```
+this is the regression of passenger count vs trip distance plot. geom_smooth can plot regression line/curve with many method.     
+
+
+now lets do some serious analysis.
+
+can we know the traffic of new york city from this data?     
+you can try it yourself first.    
+**note:** there is some bad data in this table, remove it.    
+
+
+
+
+
+you can do batter than my code:
+```{r}
+speed_time_df <- yellow_part %>%
+  filter(trip_distance>0.1 & trip_distance<50) %>%
+  mutate(pick_up_datetime = parse_date_time(tpep_pickup_datetime ,'ymd HMS')) %>%
+  mutate(dropoff_datetime = parse_date_time(tpep_dropoff_datetime ,'ymd HMS')) %>%
+  filter(pick_up_datetime>'2018-12-01' & dropoff_datetime<'2019-01-01')%>%
+  mutate(time_of_trip = dropoff_datetime - pick_up_datetime) %>%
+  filter(time_of_trip>0)%>%
+  mutate(speed = trip_distance*3600./as.numeric(time_of_trip)) %>%
+  filter(speed<1000) %>%
+  select(pick_up_datetime, speed, trip_distance,tip_amount, payment_type) 
+
+
+speed_time_df %>%
+  mutate(pick_up_time = hour(pick_up_datetime) + minute(pick_up_datetime)/60.) %>%
+  ggplot(mapping=aes(x=pick_up_time,y=speed)) +
+  geom_smooth()
+  
+```
+
+Do you get same result? now you know at 5 am, new york taxi speed is fastest.
+You can also do the same thing but with a period of a week, use any month without Christmas and try it out! 
+
+
+now you see there is a trend. but look at following example:
+```{r}
+speed_time_df %>%
+  mutate(pick_up_time = hour(pick_up_datetime) + minute(pick_up_datetime)/60.) %>%
+  sample_n(5) %>%
+  ggplot(mapping=aes(x=pick_up_time,y=speed)) +
+  geom_point()+
+  geom_smooth()
+
+```
+
+With very few data, the trend you see on the graph may not come from the statistic, but from randomness. 
+
+You may want to say what about just get more data? that is a good idea, but who is going to determine how much is enough?    
+
+Human's common sense is not always reliable. Data scientists need a mathematical method to test weather a tread you see from a graph is real or not.   
+
+```{r}
+ggplot(speed_time_df, mapping=aes(x=trip_distance,y=speed)) + geom_point() + geom_smooth(method=lm)
+tidy(lm(speed~trip_distance , data=speed_time_df))
+```
+
+The plot shows the trend of data, and draw a best fit line, but the table tells us more about the relation between 2 variables.    
+
+
+Lets look at a smaller data to make things clear:     
+
+```{r}
+small_part_df <- speed_time_df %>%
+  sample_frac(0.0005)
+ggplot(small_part_df, mapping=aes(x=trip_distance,y=speed)) + geom_point() + geom_smooth(method=lm)
+tidy(lm(speed~trip_distance , data=small_part_df))
+
+
+```
+The table has all you need to determine weather a relation exist.
+The estimate is the blue line you see in the graph. intercept is the interception point with x=0, other one is the slope.
+The std.error is the error of the estimation, statistic is distribution of sample, and p value is how certainty of this estimation.
+ 
+if you have heard the meme of 'P>0.05', it is the same p value here. 
+P value is how possible the relation you expect between data not exist at all.
+
+the formal definition is:"the p-value or probability value or significance is, for a given statistical model, the probability that, when the null hypothesis is true, the statistical summary (such as the absolute value of the sample mean difference between two compared groups) would be greater than or equal to the actual observed results." from [Wikipedia](https://en.wikipedia.org/wiki/P-value)
+
+you can do the same thing with categorical data:
+
+```{r}
+lm( trip_distance~store_and_fwd_flag, filter(yellow_part,trip_distance < 1000 & trip_distance>0 ) )
+  
+
+```
+
+lm model also treat is as 0/1 and give a linear result. 
+
+# Data Analysis
+
+Basic analysis is simple and fast in R, but it is not hard in other language. why R?    
+
+Because.....    
+Machine learning is magic!    
+And R make this magic easy to use. R has machine learning function and you can train a machine to pridict future data!     
+don't be afraid, R can handle all Machine learning part. only thing you need to do is give R clean data.    
+
+```{r ml}
+
+ml_input <- speed_time_df %>%
+  filter(payment_type==1) %>%
+  sample_frac(0.001)%>%
+  mutate(pick_up_hour=hour(pick_up_datetime))%>%
+  select(tip_amount, pick_up_hour, trip_distance)
+ml_input
+library(caret)
+set.seed(1234)
+
+lm(tip_amount~trip_distance,data=ml_input)
+
+predict_tip <- train(tip_amount~.,
+                      data = ml_input,
+                      method = "rf",
+                      ntree = 10)
+predict_tip
+```
+now you can use this model to predict now much tip passenger(s) willing to pay with given trip distance and pick up time. 
+
+```{r}
+predict(predict_tip, data.frame(pick_up_hour=6, trip_distance=5))
+```
+
+go check r document and use other method, I believe you can make better prediction!
+
+
+
+
+
+
